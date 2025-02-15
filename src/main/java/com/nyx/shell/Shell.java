@@ -8,7 +8,7 @@ import java.util.Scanner;
  * and dispatches the command for execution.
  */
 public class Shell {
-    private CommandRegistry myCommandRegistry;
+    private final CommandRegistry myCommandRegistry;
 
     /**
      * Constructs a new Shell with the provided command registry.

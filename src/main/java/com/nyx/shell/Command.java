@@ -5,6 +5,7 @@ package com.nyx.shell;
  * Each command should implement this interface to define its own execution logic.
  */
 public interface Command {
+
     /**
      * Executes the command with the specified arguments.
      *

@@ -1,5 +1,7 @@
 package com.nyx.shell;
 
+import com.nyx.shell.commands.ExitCommand;
+
 /**
  * The entry point for the shell application.
  * It initializes the command registry and starts the shell loop.
@@ -10,6 +12,7 @@ public class Main {
 
         // Register built-in commands here.
         // For example: registry.registerCommand("help", new HelpCommand());
+        registry.registerCommand("exit", new ExitCommand());
 
         // Initialize and run the shell.
         Shell shell = new Shell(registry);
