@@ -2,6 +2,7 @@ package com.nyx.shell;
 
 import com.nyx.shell.commands.EchoCommand;
 import com.nyx.shell.commands.ExitCommand;
+import com.nyx.shell.commands.TypeCommand;
 
 /**
  * The entry point for the shell application.
@@ -15,6 +16,7 @@ public class Main {
         // For example: registry.registerCommand("help", new HelpCommand());
         registry.registerCommand("exit", new ExitCommand());
         registry.registerCommand("echo", new EchoCommand());
+        registry.registerCommand("type", new TypeCommand(registry));
 
         // Initialize and run the shell.
         Shell shell = new Shell(registry);
