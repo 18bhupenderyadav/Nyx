@@ -10,6 +10,7 @@ import com.nyx.shell.CommandRegistry;
 public class TypeCommand implements Command {
     private final CommandRegistry myRegistry;
 
+
     /**
      * Constructs a new TypeCommand with the provided command registry.
      *
