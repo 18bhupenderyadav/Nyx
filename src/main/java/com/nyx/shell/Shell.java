@@ -1,5 +1,7 @@
 package com.nyx.shell;
 
+import com.nyx.shell.util.ExternalCommandRunner;
+
 import java.util.Scanner;
 
 /**
@@ -50,7 +52,8 @@ public class Shell {
             if (command != null) {
                 command.execute(args);
             } else {
-                System.out.println(commandName + ": command not found");
+                // Delegate execution of external commands.
+                ExternalCommandRunner.runExternalCommand(commandName, args);
             }
         }
         scanner.close();
