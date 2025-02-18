@@ -2,6 +2,7 @@ package com.nyx.shell;
 
 import com.nyx.shell.commands.EchoCommand;
 import com.nyx.shell.commands.ExitCommand;
+import com.nyx.shell.commands.PwdCommand;
 import com.nyx.shell.commands.TypeCommand;
 
 /**
@@ -17,6 +18,7 @@ public class Main {
         registry.registerCommand("exit", new ExitCommand());
         registry.registerCommand("echo", new EchoCommand());
         registry.registerCommand("type", new TypeCommand(registry));
+        registry.registerCommand("pwd",  new PwdCommand());
 
         // Initialize and run the shell.
         Shell shell = new Shell(registry);
