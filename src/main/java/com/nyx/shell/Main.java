@@ -1,9 +1,6 @@
 package com.nyx.shell;
 
-import com.nyx.shell.commands.EchoCommand;
-import com.nyx.shell.commands.ExitCommand;
-import com.nyx.shell.commands.PwdCommand;
-import com.nyx.shell.commands.TypeCommand;
+import com.nyx.shell.commands.*;
 
 /**
  * The entry point for the shell application.
@@ -19,6 +16,7 @@ public class Main {
         registry.registerCommand("echo", new EchoCommand());
         registry.registerCommand("type", new TypeCommand(registry));
         registry.registerCommand("pwd",  new PwdCommand());
+        registry.registerCommand("cd",   new CdCommand());
 
         // Initialize and run the shell.
         Shell shell = new Shell(registry);
