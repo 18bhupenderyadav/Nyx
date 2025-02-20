@@ -6,16 +6,19 @@ import java.io.IOException;
 
 /**
  * A built-in command that changes the current working directory.
- * Supports absolute paths, relative paths, and the "~" shorthand for the user's home directory.
+ * Supports absolute paths, relative paths, and the "~" shorthand
+ * for the user's home directory.
  */
 public class CdCommand implements Command {
 
     /**
      * Executes the cd command.
      * If the target directory is valid, the working directory is changed.
-     * If the directory doesn't exist or isn't a directory, an error message is printed.
+     * If the directory doesn't exist or isn't a directory, an error
+     * message is printed.
      *
-     * @param args The directory path to change to. Only the first argument is used.
+     * @param args The directory path to change to. Only the first
+     *             argument is used.
      */
     @Override
     public void execute(String[] args) {
@@ -24,12 +27,14 @@ public class CdCommand implements Command {
             return;
         }
 
-        // Map "~" to the user's home directory; otherwise, use the provided path.
+        // Map "~" to the user's home directory; otherwise,
+        // use the provided path.
         String inputPath = args[0];
         String resolvedPath = "~".equals(inputPath) ? System.getenv("HOME") : inputPath;
 
         File targetDir;
-        // If the resolved path is absolute, use it directly; if not, resolve relative to current directory.
+        // If the resolved path is absolute, use it directly;
+        // if not, resolve relative to current directory.
         if (new File(resolvedPath).isAbsolute()) {
             targetDir = new File(resolvedPath);
         } else {
