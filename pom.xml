@@ -21,7 +21,7 @@
         <dependency>
             <groupId>org.antlr</groupId>
             <artifactId>antlr4-runtime</artifactId>
-            <version>4.13.2</version>
+            <version>${antlr4.version}</version>
         </dependency>
         <!-- Other dependencies can be added here -->
     </dependencies>
@@ -54,6 +54,29 @@
                         <goals>
                             <goal>single</goal>
                         </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- The ANTLR4 Maven Plugin -->
+            <plugin>
+                <groupId>org.antlr</groupId>
+                <artifactId>antlr4-maven-plugin</artifactId>
+                <version>${antlr4.version}</version>
+                <executions>
+                    <execution>
+                        <id>antlr</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>antlr4</goal>
+                        </goals>
+                        <configuration>
+                            <sourceDirectory>src/main/antlr4</sourceDirectory>
+                            <outputDirectory>${project.build.directory}/generated-sources/antlr4</outputDirectory>
+                            <listener>true</listener>
+                            <visitor>true</visitor>
+                            <!-- If your grammar doesn't have @header { package ... }, you can force it here: -->
+                            <!-- packageName>com.nyx.shell</packageName -->
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>

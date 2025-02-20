@@ -1,9 +1,5 @@
 grammar Shell;
 
-@header {
-package com.nyx.shell;
-}
-
 // The entry point (for a full parse) – here we only need tokens.
 command: token+ ;
 
