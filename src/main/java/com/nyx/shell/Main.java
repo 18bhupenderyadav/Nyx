@@ -21,5 +21,6 @@ public class Main {
         // Initialize and run the shell.
         Shell shell = new Shell(registry);
         shell.run();
+
     }
 }
