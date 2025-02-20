@@ -13,7 +13,18 @@
         <maven.compiler.target>23</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <java.version>23</java.version>
+        <antlr4.version>4.9.2</antlr4.version>
     </properties>
+
+    <dependencies>
+        <!-- ANTLR runtime dependency -->
+        <dependency>
+            <groupId>org.antlr</groupId>
+            <artifactId>antlr4-runtime</artifactId>
+            <version>4.13.2</version>
+        </dependency>
+        <!-- Other dependencies can be added here -->
+    </dependencies>
 
     <build>
         <plugins>

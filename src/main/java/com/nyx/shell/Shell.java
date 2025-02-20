@@ -1,5 +1,6 @@
 package com.nyx.shell;
 
+import com.nyx.shell.util.AntlrTokenizer;
 import com.nyx.shell.util.ExternalCommandRunner;
 
 import java.util.ArrayList;
@@ -78,8 +79,11 @@ public class Shell {
             if (input.isEmpty())
                 continue;
 
-            // Tokenize the input; the first token is the command name.
-            String[] tokens = tokenize(input);
+            // Use the ANTLR-based tokenizer.
+            String[] tokens = AntlrTokenizer.tokenize(input);
+            if (tokens.length == 0) {
+                continue;
+            }
             String commandName = tokens[0];
 
             // Prepare the arguments array by excluding the command name.
