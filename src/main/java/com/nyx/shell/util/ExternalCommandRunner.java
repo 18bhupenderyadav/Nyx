@@ -1,5 +1,6 @@
 package com.nyx.shell.util;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -8,64 +9,67 @@ import java.util.Optional;
 
 /**
  * Utility class for locating and executing external commands.
+ * This class is responsible for:
+ *   Locating the executable using a helper (ExecutableFinder).
+ *   Building the command list (command name + arguments).
+ *   Executing the command with support for output redirection via ProcessBuilder.
  */
 public class ExternalCommandRunner {
 
     /**
-     * Checks if the specified command exists in the PATH.
+     * Builds the command list for ProcessBuilder.
+     * The command list starts with the command name (as typed by the user) followed by its arguments.
      *
-     * @param command The command to search for.
-     * @return true if the command exists in one of the PATH directories; false otherwise.
-     */
-    public static boolean commandExists(String command) {
-        return ExecutableFinder.findExecutable(command).isPresent();
-    }
-
-    /**
-     * Builds a command list for execution.
-     * The first element is kept as the original (relative) command name, ensuring that
-     * argv[0] remains the command name (as required by tests).
-     *
-     * @param command The command name as entered by the user.
-     * @param args    The arguments to be passed to the command.
-     * @return A list of strings representing the command and its arguments.
+     * @param command The command name.
+     * @param args    The command arguments.
+     * @return a list of strings representing the complete command.
      */
     public static List<String> buildCommandList(String command, String[] args) {
         List<String> commandList = new ArrayList<>();
-        // Use the original command name to ensure the process receives it as argv[0].
         commandList.add(command);
         commandList.addAll(Arrays.asList(args));
         return commandList;
     }
 
     /**
-     * Attempts to run an external command with the provided arguments.
-     * It first checks that the command exists in the PATH using ExecutableFinder.
-     * If the command is found, it uses ProcessBuilder to execute it while inheriting
-     * the current process's I/O. The command is executed using its relative name.
+     * Executes an external command with optional redirection of standard output and error.
      *
-     * @param command The command to execute.
-     * @param args    The arguments for the command.
+     * @param command         The command to execute.
+     * @param args            The command arguments.
+     * @param stdoutRedirect  File path to redirect stdout (null if not specified).
+     * @param stderrRedirect  File path to redirect stderr (null if not specified).
      */
-    public static void runExternalCommand(String command, String[] args) {
-        // Check if the command exists in PATH.
-        Optional<String> found = ExecutableFinder.findExecutable(command);
-        if (!found.isPresent()) {
+    public static void runExternalCommand(String command, String[] args, String stdoutRedirect, String stderrRedirect) {
+        // Find the full path to the executable using the helper.
+        Optional<String> executablePathOpt = ExecutableFinder.findExecutable(command);
+        if (executablePathOpt.isEmpty()) {
             System.out.println(command + ": not found");
             return;
         }
-
-        // Build the command list with the relative command name.
+        // Build the command list (we're passing the relative command name to keep argv[0] unchanged).
         List<String> commandList = buildCommandList(command, args);
-
         ProcessBuilder pb = new ProcessBuilder(commandList);
-        // Inherit I/O so that output/error from the external process shows in the shell.
-        pb.inheritIO();
+
+        // Set up stdout redirection if specified.
+        if (stdoutRedirect != null) {
+            pb.redirectOutput(new File(stdoutRedirect));
+        } else {
+            // Otherwise, inherit the parent's stdout.
+            pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+        }
+        // Set up stderr redirection if specified.
+        if (stderrRedirect != null) {
+            pb.redirectError(new File(stderrRedirect));
+        } else {
+            pb.redirectError(ProcessBuilder.Redirect.INHERIT);
+        }
+
+        // Start the process and wait for it to complete.
         try {
             Process process = pb.start();
             process.waitFor();
         } catch (IOException | InterruptedException e) {
-            System.err.println("Error executing command: " + command);
+            System.err.println("Error executing external command: " + command);
             e.printStackTrace();
         }
     }

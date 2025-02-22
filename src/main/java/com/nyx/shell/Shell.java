@@ -2,103 +2,92 @@ package com.nyx.shell;
 
 import com.nyx.shell.util.AntlrTokenizer;
 import com.nyx.shell.util.ExternalCommandRunner;
-
-import java.util.ArrayList;
-import java.util.List;
+import java.io.ByteArrayOutputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.io.PrintWriter;
 import java.util.Scanner;
 
 /**
- * The Shell class encapsulates the main command processing loop.
- * It reads user input from the console, parses the command and its arguments,
- * and dispatches the command for execution.
+ * The Shell class implements the main interactive loop.
+ * It performs the following steps:
+ *   Reads a line of input from the user.
+ *   Uses the ANTLR-based tokenizer to split the input into tokens (handling quotes, escapes, etc.).
+ *   Passes the tokens to CommandLineParser to build a structured CommandLine object that includes:
+ *       The command name.
+ *       Arguments.
+ *       Redirection targets for stdout and stderr.
+ *   If the command is built into the shell, it executes it and, if redirection is specified, captures and writes its output.
+ *   If the command is external, it delegates execution to ExternalCommandRunner which uses ProcessBuilder for redirection.
  */
 public class Shell {
     private final CommandRegistry myCommandRegistry;
 
-    /**
-     * Constructs a new Shell with the provided command registry.
-     *
-     * @param commandRegistry The registry that holds built-in commands.
-     */
     public Shell(CommandRegistry commandRegistry) {
         this.myCommandRegistry = commandRegistry;
     }
 
-    /**
-     * Splits the input line into tokens, respecting single quotes.
-     * Text enclosed in single quotes is preserved as a single token.
-     *
-     * @param input The raw input from the user.
-     * @return An array of tokens.
-     */
-    private String[] tokenize(String input) {
-        List<String> tokens = new ArrayList<>();
-        StringBuilder currentToken = new StringBuilder();
-        boolean inSingleQuotes = false;
-
-        for (int i = 0; i < input.length(); i++) {
-            char c = input.charAt(i);
-            if (c == '\'') {
-                // Toggle the inSingleQuotes flag when encountering a single quote.
-                inSingleQuotes = !inSingleQuotes;
-            } else if (Character.isWhitespace(c)) {
-                if (inSingleQuotes) {
-                    // If within quotes, keep whitespace.
-                    currentToken.append(c);
-                } else {
-                    // Outside quotes, end the current token if it's not empty.
-                    if (!currentToken.isEmpty()) {
-                        tokens.add(currentToken.toString());
-                        currentToken.setLength(0);
-                    }
-                }
-            } else {
-                currentToken.append(c);
-            }
-        }
-        // Add the final token if present.
-        if (!currentToken.isEmpty()) {
-            tokens.add(currentToken.toString());
-        }
-        return tokens.toArray(new String[0]);
-    }
-
-    /**
-     * Starts the shell's main loop which continuously reads input from the user,
-     * parses it, and executes the appropriate command.
-     */
     public void run() {
         Scanner scanner = new Scanner(System.in);
+        // Main shell loop: process each line of input until end-of-file.
         while (true) {
             System.out.print("$ ");
-            if (!scanner.hasNextLine())
-                break;
-
-            // Read and trim the input.
+            if (!scanner.hasNextLine()) break;
             String input = scanner.nextLine().trim();
-            if (input.isEmpty())
-                continue;
+            if (input.isEmpty()) continue;
 
-            // Use the ANTLR-based tokenizer.
+            // Tokenize the input line using our ANTLR-based tokenizer.
             String[] tokens = AntlrTokenizer.tokenize(input);
-            if (tokens.length == 0) {
-                continue;
-            }
-            String commandName = tokens[0];
+            if (tokens.length == 0) continue;
 
-            // Prepare the arguments array by excluding the command name.
-            String[] args = new String[tokens.length - 1];
-            if (tokens.length > 1) {
-                System.arraycopy(tokens, 1, args, 0, tokens.length - 1);
-            }
+            // Parse the tokens into a structured CommandLine object.
+            CommandLine commandLine = CommandLineParser.parse(tokens);
+            if (commandLine == null) continue; // Skip if no valid command is found.
 
-            // Retrieve the command from the registry.
+            // Retrieve command components from the parsed CommandLine.
+            String commandName = commandLine.getCommandName();
+            String[] args = commandLine.getArguments().toArray(new String[0]);
+            String stdoutRedirect = commandLine.getStdoutRedirect();
+            String stderrRedirect = commandLine.getStderrRedirect();
+
+            // Check if the command is a built-in command.
             Command command = myCommandRegistry.getCommand(commandName);
             if (command != null) {
-                command.execute(args);
+                // If redirection is specified for built-ins, capture output.
+                if (stdoutRedirect != null || stderrRedirect != null) {
+                    // Redirect System.out temporarily to capture the command's output.
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    PrintStream originalOut = System.out;
+                    PrintStream ps = new PrintStream(baos);
+                    System.setOut(ps);
+
+                    // Execute the built-in command.
+                    command.execute(args);
+
+                    System.out.flush();
+                    // Restore the original output stream.
+                    System.setOut(originalOut);
+                    String output = baos.toString();
+
+                    // Write captured output to the target file if stdout redirection is provided.
+                    if (stdoutRedirect != null) {
+                        try (PrintWriter writer = new PrintWriter(new FileOutputStream(stdoutRedirect))) {
+                            writer.print(output);
+                        } catch (IOException e) {
+                            System.err.println("Error writing to file: " + stdoutRedirect);
+                        }
+                    } else {
+                        // If no redirection, simply print the output.
+                        System.out.print(output);
+                    }
+                } else {
+                    // No redirection specified: simply execute the built-in.
+                    command.execute(args);
+                }
             } else {
-                // Delegate execution of external commands.
-                ExternalCommandRunner.runExternalCommand(commandName, args);
+                // External command: delegate execution to ExternalCommandRunner.
+                ExternalCommandRunner.runExternalCommand(commandName, args, stdoutRedirect, stderrRedirect);
             }
         }
         scanner.close();
