@@ -39,7 +39,9 @@ public class ExternalCommandRunner {
      * @param stdoutRedirect  File path to redirect stdout (null if not specified).
      * @param stderrRedirect  File path to redirect stderr (null if not specified).
      */
-    public static void runExternalCommand(String command, String[] args, String stdoutRedirect, String stderrRedirect) {
+    public static void runExternalCommand(String command, String[] args,
+                                          String stdoutRedirect, boolean stdoutAppend,
+                                          String stderrRedirect, boolean stderrAppend) {
         // Find the full path to the executable using the helper.
         Optional<String> executablePathOpt = ExecutableFinder.findExecutable(command);
         if (executablePathOpt.isEmpty()) {
@@ -52,14 +54,22 @@ public class ExternalCommandRunner {
 
         // Set up stdout redirection if specified.
         if (stdoutRedirect != null) {
-            pb.redirectOutput(new File(stdoutRedirect));
+            if (stdoutAppend) {
+                pb.redirectOutput(ProcessBuilder.Redirect.appendTo(new File(stdoutRedirect)));
+            } else {
+                pb.redirectOutput(new File(stdoutRedirect));
+            }
         } else {
             // Otherwise, inherit the parent's stdout.
             pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
         }
         // Set up stderr redirection if specified.
         if (stderrRedirect != null) {
-            pb.redirectError(new File(stderrRedirect));
+            if (stderrAppend) {
+                pb.redirectError(ProcessBuilder.Redirect.appendTo(new File(stderrRedirect)));
+            } else {
+                pb.redirectError(new File(stderrRedirect));
+            }
         } else {
             pb.redirectError(ProcessBuilder.Redirect.INHERIT);
         }

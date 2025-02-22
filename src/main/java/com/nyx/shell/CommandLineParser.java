@@ -26,6 +26,8 @@ public class CommandLineParser {
         List<String> commandTokens = new ArrayList<>();
         String stdoutRedirect = null;
         String stderrRedirect = null;
+        Boolean stdoutAppend  = false;
+        Boolean stderrAppend  = false;
 
         // Iterate through tokens to find redirection operators.
         for (int i = 0; i < tokens.length; i++) {
@@ -37,19 +39,38 @@ public class CommandLineParser {
                 // Ensure there is a following token (the file path).
                 if (i + 1 < tokens.length) {
                     stdoutRedirect = tokens[++i];
+                    stdoutAppend   = false; // Overwrite mode
                 } else {
                     System.out.println("Error: redirection operator without target file");
                     // You could also throw an exception here.
+                }
+            }
+            else if (token.equals(">>") || token.equals("1>>")) {
+                if (i + 1 < tokens.length) {
+                    stdoutRedirect = tokens[++i];
+                    stdoutAppend   = true; // append mode
+                } else {
+                    System.out.println("Error: redirection operator without target file");
                 }
             }
             // Check for standard error redirection ("2>").
             else if (token.equals("2>")) {
                 if (i + 1 < tokens.length) {
                     stderrRedirect = tokens[++i];
+                    stderrAppend   = false; // Overwrite mode
                 } else {
                     System.out.println("Error: redirection operator without target file");
                 }
-            } else {
+            }
+            else if (token.equals("2>>")) {
+                if (i + 1 < tokens.length) {
+                    stderrRedirect = tokens[++i];
+                    stderrAppend   = true;
+                } else {
+                    System.out.println("Error: redirection operator without target file");
+                }
+            }
+            else {
                 // If token is not a redirection operator, add it to the command tokens.
                 commandTokens.add(token);
             }
@@ -65,6 +86,6 @@ public class CommandLineParser {
         // Remaining tokens are the command's arguments.
         List<String> arguments = commandTokens.subList(1, commandTokens.size());
 
-        return new CommandLine(commandName, arguments, stdoutRedirect, stderrRedirect);
+        return new CommandLine(commandName, arguments, stdoutRedirect, stdoutAppend, stderrRedirect, stderrAppend);
     }
 }

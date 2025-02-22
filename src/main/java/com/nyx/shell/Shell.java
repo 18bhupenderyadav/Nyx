@@ -86,7 +86,7 @@ public class Shell {
 
                     // Write stdout captured content if stdout redirection is specified.
                     if (stdoutRedirect != null) {
-                        try (PrintWriter writer = new PrintWriter(new FileOutputStream(stdoutRedirect))) {
+                        try (PrintWriter writer = new PrintWriter(new FileOutputStream(stdoutRedirect, commandLine.isStdoutAppend()))) {
                             writer.print(outContent);
                         } catch (IOException e) {
                             System.err.println("Error writing to file: " + stdoutRedirect);
@@ -98,7 +98,7 @@ public class Shell {
 
                     // Write stderr captured content if stderr redirection is specified.
                     if (stderrRedirect != null) {
-                        try (PrintWriter writer = new PrintWriter(new FileOutputStream(stderrRedirect))) {
+                        try (PrintWriter writer = new PrintWriter(new FileOutputStream(stderrRedirect, commandLine.isStderrAppend()))) {
                             writer.print(errContent);
                         } catch (IOException e) {
                             System.err.println("Error writing to file: " + stderrRedirect);
@@ -112,7 +112,9 @@ public class Shell {
                 }
             } else {
                 // External command: delegate execution to ExternalCommandRunner.
-                ExternalCommandRunner.runExternalCommand(commandName, args, stdoutRedirect, stderrRedirect);
+                ExternalCommandRunner.runExternalCommand(commandName, args,
+                                                         stdoutRedirect, commandLine.isStdoutAppend(),
+                                                         stderrRedirect, commandLine.isStderrAppend());
             }
         }
         scanner.close();
