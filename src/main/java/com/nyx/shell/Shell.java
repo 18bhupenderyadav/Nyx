@@ -96,6 +96,7 @@ public class Shell {
                         System.out.print(outContent);
                     }
 
+
                     // Write stderr captured content if stderr redirection is specified.
                     if (stderrRedirect != null) {
                         try (PrintWriter writer = new PrintWriter(new FileOutputStream(stderrRedirect, commandLine.isStderrAppend()))) {
