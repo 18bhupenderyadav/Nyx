@@ -56,30 +56,55 @@ public class Shell {
             if (command != null) {
                 // If redirection is specified for built-ins, capture output.
                 if (stdoutRedirect != null || stderrRedirect != null) {
-                    // Redirect System.out temporarily to capture the command's output.
-                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+
+                    // Create separate ByteArrayOutputStreams for stdout and stderr.
+                    ByteArrayOutputStream baosOut = new ByteArrayOutputStream();
+                    ByteArrayOutputStream baosErr = new ByteArrayOutputStream();
+
+                    // Save the original System.out and System.err.
                     PrintStream originalOut = System.out;
-                    PrintStream ps = new PrintStream(baos);
-                    System.setOut(ps);
+                    PrintStream originalErr = System.err;
+
+                    // Redirect System.out and System.err to our capturing streams.
+                    System.setOut(new PrintStream(baosOut));
+                    System.setErr(new PrintStream(baosErr));
 
                     // Execute the built-in command.
                     command.execute(args);
 
+                    // Flush the file handlers.
                     System.out.flush();
+                    System.err.flush();
+
                     // Restore the original output stream.
                     System.setOut(originalOut);
-                    String output = baos.toString();
+                    System.setErr(originalErr);
 
-                    // Write captured output to the target file if stdout redirection is provided.
+                    // Retrieve the captured outputs.
+                    String outContent = baosOut.toString();
+                    String errContent = baosErr.toString();
+
+                    // Write stdout captured content if stdout redirection is specified.
                     if (stdoutRedirect != null) {
                         try (PrintWriter writer = new PrintWriter(new FileOutputStream(stdoutRedirect))) {
-                            writer.print(output);
+                            writer.print(outContent);
                         } catch (IOException e) {
                             System.err.println("Error writing to file: " + stdoutRedirect);
                         }
                     } else {
-                        // If no redirection, simply print the output.
-                        System.out.print(output);
+                        // Otherwise, print to the console.
+                        System.out.print(outContent);
+                    }
+
+                    // Write stderr captured content if stderr redirection is specified.
+                    if (stderrRedirect != null) {
+                        try (PrintWriter writer = new PrintWriter(new FileOutputStream(stderrRedirect))) {
+                            writer.print(errContent);
+                        } catch (IOException e) {
+                            System.err.println("Error writing to file: " + stderrRedirect);
+                        }
+                    } else {
+                        System.err.print(errContent);
                     }
                 } else {
                     // No redirection specified: simply execute the built-in.
