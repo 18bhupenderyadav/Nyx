@@ -1,62 +1,144 @@
 package com.nyx.shell.commands;
 
 import com.nyx.shell.Command;
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
+import java.nio.file.*;
+import java.util.Stack;
 
 /**
- * A built-in command that changes the current working directory.
- * Supports absolute paths, relative paths, and the "~" shorthand
- * for the user's home directory.
+ * Implementation of the cd (change directory) command.
+ * Features:
+ * - Home directory expansion (~)
+ * - Previous directory tracking (-)
+ * - Path normalization
+ * - Symbolic link handling
  */
 public class CdCommand implements Command {
+    private static final String HOME_DIR = System.getProperty("user.home");
+    private static Stack<String> directoryHistory = new Stack<>();
+    private static String previousDirectory = null;
+
+    @Override
+    public int execute(String[] args, InputStream input, 
+                      OutputStream output, OutputStream error) throws IOException {
+        try {
+            validateArgs(args);
+            
+            PrintWriter err = new PrintWriter(new OutputStreamWriter(error, "UTF-8"), true);
+            String currentDir = System.getProperty("user.dir");
+            String targetDir;
+
+            // Determine target directory
+            if (args.length == 0 || args[0].equals("~")) {
+                targetDir = HOME_DIR;
+            } else if (args[0].equals("-")) {
+                if (previousDirectory == null) {
+                    err.println("cd: no previous directory");
+                    err.flush();
+                    return GENERAL_ERROR;
+                }
+                targetDir = previousDirectory;
+            } else {
+                targetDir = expandPath(args[0]);
+            }
+
+            // Try to change to the target directory
+            try {
+                Path path = Paths.get(targetDir).toAbsolutePath().normalize();
+                
+                // Verify the directory exists and is accessible
+                if (!Files.exists(path)) {
+                    err.println("cd: " + targetDir + ": No such file or directory");
+                    err.flush();
+                    return GENERAL_ERROR;
+                }
+                
+                if (!Files.isDirectory(path)) {
+                    err.println("cd: " + targetDir + ": Not a directory");
+                    err.flush();
+                    return GENERAL_ERROR;
+                }
+                
+                if (!Files.isReadable(path)) {
+                    err.println("cd: " + targetDir + ": Permission denied");
+                    err.flush();
+                    return GENERAL_ERROR;
+                }
+
+                // Update directory history
+                if (!currentDir.equals(path.toString())) {
+                    previousDirectory = currentDir;
+                    directoryHistory.push(currentDir);
+                }
+
+                // Change directory
+                System.setProperty("user.dir", path.toString());
+                return SUCCESS;
+
+            } catch (SecurityException e) {
+                err.println("cd: " + targetDir + ": Permission denied");
+                err.flush();
+                return GENERAL_ERROR;
+            } catch (InvalidPathException e) {
+                err.println("cd: " + targetDir + ": Invalid path");
+                err.flush();
+                return GENERAL_ERROR;
+            }
+
+        } catch (Exception e) {
+            PrintWriter err = new PrintWriter(new OutputStreamWriter(error, "UTF-8"), true);
+            err.println("cd: " + e.getMessage());
+            err.flush();
+            return GENERAL_ERROR;
+        }
+    }
+
+    @Override
+    public void validateArgs(String[] args) {
+        if (args != null && args.length > 1) {
+            throw new IllegalArgumentException("cd: too many arguments");
+        }
+    }
+
+    @Override
+    public String getHelp() {
+        return "Usage: cd [dir]\n" +
+               "Change the current directory.\n\n" +
+               "Arguments:\n" +
+               "  dir    The directory to change to. If not specified, changes to\n" +
+               "         the home directory.\n\n" +
+               "Special paths:\n" +
+               "  ~      Home directory\n" +
+               "  -      Previous directory\n" +
+               "  .      Current directory\n" +
+               "  ..     Parent directory\n";
+    }
 
     /**
-     * Executes the cd command.
-     * If the target directory is valid, the working directory is changed.
-     * If the directory doesn't exist or isn't a directory, an error
-     * message is printed.
-     *
-     * @param args The directory path to change to. Only the first
-     *             argument is used.
+     * Expands special characters in paths.
+     * Handles: ~, ., .., and environment variables
      */
+    private String expandPath(String path) {
+        if (path.startsWith("~")) {
+            // Replace ~ with home directory
+            return HOME_DIR + path.substring(1);
+        }
+
+        // Handle environment variable expansion
+        if (path.contains("$")) {
+            for (String key : System.getenv().keySet()) {
+                String var = "$" + key;
+                if (path.contains(var)) {
+                    path = path.replace(var, System.getenv(key));
+                }
+            }
+        }
+
+        return path;
+    }
+
     @Override
-    public void execute(String[] args) {
-        if (args.length < 1) {
-            System.out.println("cd: missing operand");
-            return;
-        }
-
-        // Map "~" to the user's home directory; otherwise,
-        // use the provided path.
-        String inputPath = args[0];
-        String resolvedPath = "~".equals(inputPath) ? System.getenv("HOME") : inputPath;
-
-        File targetDir;
-        // If the resolved path is absolute, use it directly;
-        // if not, resolve relative to current directory.
-        if (new File(resolvedPath).isAbsolute()) {
-            targetDir = new File(resolvedPath);
-        } else {
-            String currentDir = System.getProperty("user.dir");
-            targetDir = new File(currentDir, resolvedPath);
-        }
-
-        // Normalize the path to handle any relative components like ./ or ../.
-        try {
-            targetDir = targetDir.getCanonicalFile();
-        } catch (IOException e) {
-            System.out.println("cd: " + args[0] + ": No such file or directory");
-            return;
-        }
-
-        // Check if the target directory exists and is indeed a directory.
-        if (!targetDir.exists() || !targetDir.isDirectory()) {
-            System.out.println("cd: " + args[0] + ": No such file or directory");
-            return;
-        }
-
-        // Update the working directory. The pwd command will read this property.
-        System.setProperty("user.dir", targetDir.getAbsolutePath());
+    public boolean supportsPipelineInput() {
+        return false; // cd doesn't process input from other commands
     }
 }

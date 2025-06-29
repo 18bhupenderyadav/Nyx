@@ -4,88 +4,146 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Parses an array of tokens (from the ANTLR tokenizer) into a CommandLine object.
- * This class isolates the logic of identifying redirection operators (like ">", "1>", "2>")
- * and separating them from the command and its arguments.
- * Example:
- *   Input tokens: {"ls", "/tmp/baz", ">", "/tmp/foo/baz.md"}
- *   Parsed result:
- *     commandName = "ls"
- *     arguments   = ["/tmp/baz"]
- *     stdoutRedirect = "/tmp/foo/baz.md"
+ * Parses tokenized command line input into structured CommandLine objects.
+ * Supports:
+ * <ul>
+ *   <li>Command name and arguments parsing</li>
+ *   <li>I/O redirection operators (>, >>, 2>, 2>>)</li>
+ *   <li>Pipeline operator (|) - TODO: Implementation pending</li>
+ *   <li>Error detection and reporting</li>
+ * </ul>
  */
 public class CommandLineParser {
 
     /**
+     * Error codes for parsing failures
+     */
+    private static final int NO_ERROR = 0;
+    private static final int MISSING_REDIRECT_TARGET = 1;
+    private static final int MULTIPLE_REDIRECTIONS = 2;
+    private static final int NO_COMMAND = 3;
+
+    /**
+     * Parse result containing both the CommandLine and any error information
+     */
+    public static class ParseResult {
+        public final CommandLine commandLine;
+        public final int errorCode;
+        public final String errorMessage;
+
+        private ParseResult(CommandLine cmd, int error, String message) {
+            this.commandLine = cmd;
+            this.errorCode = error;
+            this.errorMessage = message;
+        }
+
+        public static ParseResult success(CommandLine cmd) {
+            return new ParseResult(cmd, NO_ERROR, null);
+        }
+
+        public static ParseResult error(int code, String message) {
+            return new ParseResult(null, code, message);
+        }
+
+        public boolean hasError() {
+            return errorCode != NO_ERROR;
+        }
+    }
+
+    /**
      * Parses the given tokens into a CommandLine object.
      *
-     * @param tokens Array of tokens (as strings) produced by the tokenizer.
-     * @return a CommandLine object or null if no command is found.
+     * @param tokens Array of tokens produced by the tokenizer
+     * @return ParseResult containing either a valid CommandLine or error information
      */
-    public static CommandLine parse(String[] tokens) {
+    public static ParseResult parse(String[] tokens) {
+        if (tokens == null || tokens.length == 0) {
+            return ParseResult.error(NO_COMMAND, "No command provided");
+        }
+
         List<String> commandTokens = new ArrayList<>();
         String stdoutRedirect = null;
         String stderrRedirect = null;
-        Boolean stdoutAppend  = false;
-        Boolean stderrAppend  = false;
+        boolean stdoutAppend = false;
+        boolean stderrAppend = false;
 
-        // Iterate through tokens to find redirection operators.
+        // Track redirection states to detect duplicates
+        boolean hasStdoutRedirect = false;
+        boolean hasStderrRedirect = false;
+
         for (int i = 0; i < tokens.length; i++) {
             String token = tokens[i];
 
-            // Check for standard output redirection:
-            // Either ">" or "1>" indicates redirection of stdout.
-            if (token.equals(">") || token.equals("1>")) {
-                // Ensure there is a following token (the file path).
-                if (i + 1 < tokens.length) {
-                    stdoutRedirect = tokens[++i];
-                    stdoutAppend   = false; // Overwrite mode
-                } else {
-                    System.out.println("Error: redirection operator without target file");
-                    // You could also throw an exception here.
+            // Check for stdout redirection
+            if (token.equals(">") || token.equals("1>") || token.equals(">>") || token.equals("1>>")) {
+                if (hasStdoutRedirect) {
+                    return ParseResult.error(MULTIPLE_REDIRECTIONS, 
+                        "Multiple stdout redirections not allowed");
                 }
+                
+                if (i + 1 >= tokens.length) {
+                    return ParseResult.error(MISSING_REDIRECT_TARGET, 
+                        "Missing target file for " + token);
+                }
+
+                stdoutRedirect = tokens[++i];
+                stdoutAppend = token.endsWith(">>");
+                hasStdoutRedirect = true;
             }
-            else if (token.equals(">>") || token.equals("1>>")) {
-                if (i + 1 < tokens.length) {
-                    stdoutRedirect = tokens[++i];
-                    stdoutAppend   = true; // append mode
-                } else {
-                    System.out.println("Error: redirection operator without target file");
+            // Check for stderr redirection
+            else if (token.equals("2>") || token.equals("2>>")) {
+                if (hasStderrRedirect) {
+                    return ParseResult.error(MULTIPLE_REDIRECTIONS, 
+                        "Multiple stderr redirections not allowed");
                 }
+                
+                if (i + 1 >= tokens.length) {
+                    return ParseResult.error(MISSING_REDIRECT_TARGET, 
+                        "Missing target file for " + token);
+                }
+
+                stderrRedirect = tokens[++i];
+                stderrAppend = token.equals("2>>");
+                hasStderrRedirect = true;
             }
-            // Check for standard error redirection ("2>").
-            else if (token.equals("2>")) {
-                if (i + 1 < tokens.length) {
-                    stderrRedirect = tokens[++i];
-                    stderrAppend   = false; // Overwrite mode
-                } else {
-                    System.out.println("Error: redirection operator without target file");
-                }
-            }
-            else if (token.equals("2>>")) {
-                if (i + 1 < tokens.length) {
-                    stderrRedirect = tokens[++i];
-                    stderrAppend   = true;
-                } else {
-                    System.out.println("Error: redirection operator without target file");
-                }
+            // Future: Handle pipe operator here
+            else if (token.equals("|")) {
+                // TODO: Implement pipeline support
+                // Currently just collecting as part of command
+                commandTokens.add(token);
             }
             else {
-                // If token is not a redirection operator, add it to the command tokens.
                 commandTokens.add(token);
             }
         }
 
-        // If no command tokens are present, return null.
         if (commandTokens.isEmpty()) {
-            return null;
+            return ParseResult.error(NO_COMMAND, "No command specified");
         }
 
-        // The first token is assumed to be the command name.
-        String commandName = commandTokens.getFirst();
-        // Remaining tokens are the command's arguments.
+        String commandName = commandTokens.get(0);
         List<String> arguments = commandTokens.subList(1, commandTokens.size());
 
-        return new CommandLine(commandName, arguments, stdoutRedirect, stdoutAppend, stderrRedirect, stderrAppend);
+        CommandLine cmdLine = new CommandLine(
+            commandName, arguments, 
+            stdoutRedirect, stdoutAppend,
+            stderrRedirect, stderrAppend
+        );
+
+        return ParseResult.success(cmdLine);
+    }
+
+    /**
+     * Legacy parse method for backward compatibility
+     */
+    public static CommandLine parse(String[] tokens, boolean legacyMode) {
+        ParseResult result = parse(tokens);
+        if (result.hasError()) {
+            if (legacyMode) {
+                return null;
+            }
+            throw new IllegalArgumentException(result.errorMessage);
+        }
+        return result.commandLine;
     }
 }

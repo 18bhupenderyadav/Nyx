@@ -6,23 +6,36 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Utility class for locating and executing external commands.
- * This class is responsible for:
- *   Locating the executable using a helper (ExecutableFinder).
- *   Building the command list (command name + arguments).
- *   Executing the command with support for output redirection via ProcessBuilder.
+ * This class handles:
+ * <ul>
+ *   <li>Command path resolution using PATH environment variable</li>
+ *   <li>Process creation and execution</li>
+ *   <li>Standard I/O redirection</li>
+ *   <li>Process monitoring and termination</li>
+ *   <li>Error handling and reporting</li>
+ * </ul>
  */
 public class ExternalCommandRunner {
+    
+    // Default timeout for commands in seconds
+    private static final long DEFAULT_TIMEOUT = 30;
+    
+    // Exit codes
+    private static final int SUCCESS = 0;
+    private static final int COMMAND_NOT_FOUND = 127;
+    private static final int EXECUTION_ERROR = 1;
 
     /**
      * Builds the command list for ProcessBuilder.
-     * The command list starts with the command name (as typed by the user) followed by its arguments.
+     * Combines the command name with its arguments while preserving the original command name in argv[0].
      *
-     * @param command The command name.
-     * @param args    The command arguments.
-     * @return a list of strings representing the complete command.
+     * @param command The command name as typed by the user
+     * @param args    The command arguments
+     * @return A list of strings representing the complete command
      */
     public static List<String> buildCommandList(String command, String[] args) {
         List<String> commandList = new ArrayList<>();
@@ -33,54 +46,102 @@ public class ExternalCommandRunner {
 
     /**
      * Executes an external command with optional redirection of standard output and error.
+     * Supports both overwrite (>) and append (>>) modes for redirections.
      *
-     * @param command         The command to execute.
-     * @param args            The command arguments.
-     * @param stdoutRedirect  File path to redirect stdout (null if not specified).
-     * @param stderrRedirect  File path to redirect stderr (null if not specified).
+     * @param command         The command to execute
+     * @param args           The command arguments
+     * @param stdoutRedirect File path to redirect stdout (null if not specified)
+     * @param stdoutAppend   Whether to append to stdout redirect file
+     * @param stderrRedirect File path to redirect stderr (null if not specified)
+     * @param stderrAppend   Whether to append to stderr redirect file
+     * @return The exit code of the command
      */
-    public static void runExternalCommand(String command, String[] args,
-                                          String stdoutRedirect, boolean stdoutAppend,
-                                          String stderrRedirect, boolean stderrAppend) {
-        // Find the full path to the executable using the helper.
-        Optional<String> executablePathOpt = ExecutableFinder.findExecutable(command);
-        if (executablePathOpt.isEmpty()) {
-            System.out.println(command + ": not found");
-            return;
+    public static int runExternalCommand(String command, String[] args,
+                                     String stdoutRedirect, boolean stdoutAppend,
+                                     String stderrRedirect, boolean stderrAppend) {
+        try {
+            // Find the full path to the executable
+            Optional<String> executablePathOpt = ExecutableFinder.findExecutable(command);
+            if (executablePathOpt.isEmpty()) {
+                System.err.println(command + ": command not found");
+                return COMMAND_NOT_FOUND;
+            }
+
+            // Build and configure the process
+            ProcessBuilder pb = configureProcess(command, args, 
+                                              stdoutRedirect, stdoutAppend,
+                                              stderrRedirect, stderrAppend);
+
+            // Execute and monitor the process
+            return executeProcess(pb, command);
+
+        } catch (Exception e) {
+            handleExecutionError(command, e);
+            return EXECUTION_ERROR;
         }
-        // Build the command list (we're passing the relative command name to keep argv[0] unchanged).
+    }
+
+    /**
+     * Configures the ProcessBuilder with the command and its I/O redirections.
+     */
+    private static ProcessBuilder configureProcess(String command, String[] args,
+                                                 String stdoutRedirect, boolean stdoutAppend,
+                                                 String stderrRedirect, boolean stderrAppend) {
         List<String> commandList = buildCommandList(command, args);
         ProcessBuilder pb = new ProcessBuilder(commandList);
 
-        // Set up stdout redirection if specified.
+        // Configure stdout redirection
         if (stdoutRedirect != null) {
-            if (stdoutAppend) {
-                pb.redirectOutput(ProcessBuilder.Redirect.appendTo(new File(stdoutRedirect)));
-            } else {
-                pb.redirectOutput(new File(stdoutRedirect));
-            }
+            File redirectFile = new File(stdoutRedirect);
+            pb.redirectOutput(stdoutAppend ? 
+                ProcessBuilder.Redirect.appendTo(redirectFile) : 
+                ProcessBuilder.Redirect.to(redirectFile));
         } else {
-            // Otherwise, inherit the parent's stdout.
             pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
         }
-        // Set up stderr redirection if specified.
+
+        // Configure stderr redirection
         if (stderrRedirect != null) {
-            if (stderrAppend) {
-                pb.redirectError(ProcessBuilder.Redirect.appendTo(new File(stderrRedirect)));
-            } else {
-                pb.redirectError(new File(stderrRedirect));
-            }
+            File redirectFile = new File(stderrRedirect);
+            pb.redirectError(stderrAppend ? 
+                ProcessBuilder.Redirect.appendTo(redirectFile) : 
+                ProcessBuilder.Redirect.to(redirectFile));
         } else {
             pb.redirectError(ProcessBuilder.Redirect.INHERIT);
         }
 
-        // Start the process and wait for it to complete.
+        return pb;
+    }
+
+    /**
+     * Executes and monitors the process, handling timeouts and interruptions.
+     */
+    private static int executeProcess(ProcessBuilder pb, String command) throws IOException, InterruptedException {
+        Process process = pb.start();
+        
         try {
-            Process process = pb.start();
-            process.waitFor();
-        } catch (IOException | InterruptedException e) {
-            System.err.println("Error executing external command: " + command);
-            e.printStackTrace();
+            // Wait for the process with timeout
+            if (!process.waitFor(DEFAULT_TIMEOUT, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                System.err.println(command + ": process timed out after " + DEFAULT_TIMEOUT + " seconds");
+                return EXECUTION_ERROR;
+            }
+            
+            return process.exitValue();
+        } catch (InterruptedException e) {
+            // Handle interrupt by terminating the process
+            process.destroyForcibly();
+            Thread.currentThread().interrupt(); // Preserve interrupt status
+            throw e;
         }
+    }
+
+    /**
+     * Handles and logs execution errors.
+     */
+    private static void handleExecutionError(String command, Exception e) {
+        String errorMessage = e instanceof IOException ? 
+            "I/O error occurred" : "Execution failed";
+        System.err.println(command + ": " + errorMessage + " - " + e.getMessage());
     }
 }
